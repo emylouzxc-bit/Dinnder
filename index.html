@@ -3,9 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dinnder - Family Meal Matcher</title>
-    <!-- Tailwind CSS CDN for modern utility-first styling -->
+    <title>Dinnder - Cloud Family Meal Matcher</title>
+    <!-- Tailwind CSS CDN for Glassmorphism UI -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Firebase SDKs for Real-Time Cloud Database Syncing -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
     <style>
         /* Modern Glassmorphism Styling */
         .glass-card {
@@ -52,9 +57,27 @@
 
     <script>
         /**
-         * 1. DEFAULT MEALS CONFIGURATION
-         * Adjust this list to change the starting meals and ingredients!
-         * Notice that 'likes' and 'dislikes' start completely empty ([]).
+         * ============================================================================
+         * 1. CLOUD DATABASE CONFIGURATION
+         * Paste your Firebase Realtime Database URL inside the quotes below.
+         * ============================================================================
+         */
+        const FIREBASE_CONFIG = {
+            databaseURL: "// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyDpt4AsXXEnHz-FLuEQYTvXQU5KfD8KNtU",
+  authDomain: "dinnder-54fac.firebaseapp.com",
+  projectId: "dinnder-54fac",
+  storageBucket: "dinnder-54fac.firebasestorage.app",
+  messagingSenderId: "523454429939",
+  appId: "1:523454429939:web:b1d7b04b5e7dfe126f9586",
+  measurementId: "G-BDBLBD9R4D"
+};"
+        };
+
+        /**
+         * 2. DEFAULT MEALS CONFIGURATION (After line 51)
+         * Starting meals always begin with empty likes [] and dislikes [].
          */
         const DEFAULT_MEALS = [
             { id: 1, icon: '🍝', name: 'Spaghetti Bolognese', ingredients: ['Minced Beef', 'Tomatoes', 'Spaghetti', 'Garlic', 'Onion', 'Parmesan'], likes: [], dislikes: [] },
@@ -66,88 +89,135 @@
         ];
 
         /**
-         * 2. APPLICATION STATE MANAGEMENT
-         * Stores authentication, family group link data, members, and meal votes.
+         * 3. APPLICATION STATE MANAGEMENT
          */
         let state = {
             isAuthenticated: false,
             userEmail: '',
             groupCode: '',
-            groupName: 'Our Family',
-            members: ['Mom', 'Dad', 'Emma', 'Noah'],
             activeMember: 'Mom',
             newMemberName: '',
             newMealName: '',
             newMealIngredients: '',
             joinCodeInput: '',
             showAddMealModal: false,
-            meals: JSON.parse(JSON.stringify(DEFAULT_MEALS)),
-            currentTab: 'voting' // Options: 'voting', 'crossover', 'settings'
+            currentTab: 'voting',
+            members: ['Mom', 'Dad', 'Emma', 'Noah'],
+            meals: JSON.parse(JSON.stringify(DEFAULT_MEALS))
         };
 
-        // Helper to generate a random 6-character Family Room Code
+        let db = null;
+        let isCloudConnected = false;
+        let currentRoomRef = null;
+
+        function initCloudDatabase() {
+            const url = FIREBASE_CONFIG.databaseURL.trim();
+            if (url && url !== "PASTE_YOUR_DATABASE_URL_HERE" && url.startsWith("https://")) {
+                try {
+                    firebase.initializeApp(FIREBASE_CONFIG);
+                    db = firebase.database();
+                    isCloudConnected = true;
+                } catch (error) {
+                    console.error("Firebase setup error:", error);
+                    isCloudConnected = false;
+                }
+            }
+        }
+
+        function subscribeToFamilyRoom(roomCode) {
+            if (!isCloudConnected || !db || !roomCode) return;
+            if (currentRoomRef) {
+                currentRoomRef.off();
+            }
+            currentRoomRef = db.ref('dinnder_rooms/' + roomCode);
+            currentRoomRef.on('value', (snapshot) => {
+                const cloudData = snapshot.val();
+                if (cloudData) {
+                    state.members = cloudData.members || ['Mom'];
+                    state.meals = (cloudData.meals || DEFAULT_MEALS).map(meal => ({
+                        ...meal,
+                        ingredients: meal.ingredients || [],
+                        likes: meal.likes || [],
+                        dislikes: meal.dislikes || []
+                    }));
+                    if (!state.members.includes(state.activeMember)) {
+                        state.activeMember = state.members[0];
+                    }
+                    saveLocalDeviceState();
+                    render();
+                } else {
+                    pushSharedDataToCloud();
+                }
+            });
+        }
+
+        function pushSharedDataToCloud() {
+            saveLocalDeviceState();
+            if (isCloudConnected && currentRoomRef) {
+                currentRoomRef.set({
+                    members: state.members,
+                    meals: state.meals,
+                    lastUpdated: Date.now()
+                });
+            }
+        }
+
         function generateGroupCode() {
             return Math.random().toString(36).substring(2, 8).toUpperCase();
         }
 
-        // Load saved state from localStorage and check URL for an invite link
+        function saveLocalDeviceState() {
+            localStorage.setItem('dinnder_cloud_v1_state', JSON.stringify(state));
+        }
+
         function loadState() {
-            const saved = localStorage.getItem('dinnder_v2_state');
+            initCloudDatabase();
+            const saved = localStorage.getItem('dinnder_cloud_v1_state');
             if (saved) {
                 try {
                     state = JSON.parse(saved);
                 } catch (e) {
-                    console.error('Error loading saved state:', e);
+                    console.error('Error loading local state:', e);
                 }
             }
-
-            // Check if user opened a shared family link (?room=XXXXXX)
             const urlParams = new URLSearchParams(window.location.search);
             const roomFromUrl = urlParams.get('room');
             if (roomFromUrl && roomFromUrl.trim().length === 6) {
                 state.groupCode = roomFromUrl.trim().toUpperCase();
-                saveState();
+                saveLocalDeviceState();
             }
-
+            if (state.isAuthenticated && state.groupCode) {
+                subscribeToFamilyRoom(state.groupCode);
+            }
             render();
         }
 
-        // Save state to browser localStorage
-        function saveState() {
-            localStorage.setItem('dinnder_v2_state', JSON.stringify(state));
-        }
-
-        // Reset all votes back to zero (Fresh Slate)
         function resetAllVotes() {
             state.meals.forEach(meal => {
                 meal.likes = [];
                 meal.dislikes = [];
             });
-            saveState();
+            pushSharedDataToCloud();
             render();
         }
 
-        /**
-         * 3. AUTHENTICATION & FAMILY GROUP LINK HANDLERS
-         */
         function handleLogin(e) {
             e.preventDefault();
             const emailInput = document.getElementById('loginEmail').value.trim();
             if (emailInput) {
-                // If logging in for the very first time, ensure all meals start with no selections
-                const isFirstLogin = !localStorage.getItem('dinnder_v2_initialized');
+                const isFirstLogin = !localStorage.getItem('dinnder_cloud_v1_init');
                 if (isFirstLogin) {
                     state.meals = JSON.parse(JSON.stringify(DEFAULT_MEALS));
-                    localStorage.setItem('dinnder_v2_initialized', 'true');
+                    localStorage.setItem('dinnder_cloud_v1_init', 'true');
                 }
-
                 state.isAuthenticated = true;
                 state.userEmail = emailInput;
                 if (!state.groupCode) {
                     state.groupCode = generateGroupCode();
                 }
-                state.currentTab = 'voting'; // Launch straight into Tinder meal selection!
-                saveState();
+                state.currentTab = 'voting';
+                saveLocalDeviceState();
+                subscribeToFamilyRoom(state.groupCode);
                 render();
             }
         }
@@ -155,7 +225,7 @@
         function handleLogout() {
             state.isAuthenticated = false;
             state.userEmail = '';
-            saveState();
+            saveLocalDeviceState();
             render();
         }
 
@@ -164,7 +234,7 @@
             const inviteUrl = `${baseUrl}?room=${state.groupCode}`;
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(inviteUrl).then(() => {
-                    alert(`Family Invite Link copied to clipboard!\n\nLink: ${inviteUrl}\nRoom Code: ${state.groupCode}`);
+                    alert(`Family Invite Link copied to clipboard!\n\nSend this link to your family:\n${inviteUrl}`);
                 }).catch(() => {
                     prompt("Copy your family invite link below:", inviteUrl);
                 });
@@ -179,17 +249,15 @@
             if (code.length === 6) {
                 state.groupCode = code;
                 state.joinCodeInput = '';
-                saveState();
-                alert(`Successfully joined Family Group (${code})!`);
+                saveLocalDeviceState();
+                subscribeToFamilyRoom(state.groupCode);
+                alert(`Joined Family Room: ${code}! Syncing meals...`);
                 render();
             } else {
                 alert("Please enter a valid 6-character family code.");
             }
         }
 
-        /**
-         * 4. FAMILY PROFILE & MEAL MANAGEMENT
-         */
         function addMember(e) {
             e.preventDefault();
             const name = state.newMemberName.trim();
@@ -197,7 +265,7 @@
                 state.members.push(name);
                 state.newMemberName = '';
                 state.activeMember = name;
-                saveState();
+                pushSharedDataToCloud();
                 render();
             }
         }
@@ -209,13 +277,13 @@
             }
             state.members = state.members.filter(m => m !== memberName);
             state.meals.forEach(meal => {
-                meal.likes = meal.likes.filter(m => m !== memberName);
-                meal.dislikes = meal.dislikes.filter(m => m !== memberName);
+                meal.likes = (meal.likes || []).filter(m => m !== memberName);
+                meal.dislikes = (meal.dislikes || []).filter(m => m !== memberName);
             });
             if (state.activeMember === memberName) {
                 state.activeMember = state.members[0];
             }
-            saveState();
+            pushSharedDataToCloud();
             render();
         }
 
@@ -240,7 +308,7 @@
                 state.newMealName = '';
                 state.newMealIngredients = '';
                 state.showAddMealModal = false;
-                saveState();
+                pushSharedDataToCloud();
                 render();
             }
         }
@@ -248,15 +316,15 @@
         function voteMeal(mealId, voteType) {
             const meal = state.meals.find(m => m.id === mealId);
             if (meal) {
-                meal.likes = meal.likes.filter(m => m !== state.activeMember);
-                meal.dislikes = meal.dislikes.filter(m => m !== state.activeMember);
+                meal.likes = (meal.likes || []).filter(m => m !== state.activeMember);
+                meal.dislikes = (meal.dislikes || []).filter(m => m !== state.activeMember);
 
                 if (voteType === 'like') {
                     meal.likes.push(state.activeMember);
                 } else if (voteType === 'dislike') {
                     meal.dislikes.push(state.activeMember);
                 }
-                saveState();
+                pushSharedDataToCloud();
                 render();
             }
         }
@@ -268,14 +336,10 @@
 
         function setActiveMember(member) {
             state.activeMember = member;
-            saveState();
+            saveLocalDeviceState();
             render();
         }
 
-        /**
-         * 5. TINDER SWIPE PHYSICS ENGINE
-         * Handles touch and mouse dragging, card rotation, and LIKE/NOPE stamps.
-         */
         let isDragging = false;
         let startX = 0;
         let currentX = 0;
@@ -297,10 +361,9 @@
                 if (!isDragging) return;
                 currentX = clientX;
                 const deltaX = currentX - startX;
-                const rotation = deltaX * 0.07; // Tilt angle multiplier
+                const rotation = deltaX * 0.07;
                 card.style.transform = `translateX(${deltaX}px) rotate(${rotation}deg)`;
 
-                // Show dynamic LIKE / NOPE stamps based on swipe direction
                 if (likeStamp && nopeStamp) {
                     if (deltaX > 25) {
                         likeStamp.style.opacity = Math.min(deltaX / 100, 1);
@@ -321,7 +384,6 @@
                 const deltaX = currentX - startX;
                 card.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
 
-                // Swipe threshold (85px left or right)
                 if (deltaX > 85) {
                     card.style.transform = `translateX(450px) rotate(28deg)`;
                     card.style.opacity = '0';
@@ -331,19 +393,16 @@
                     card.style.opacity = '0';
                     setTimeout(() => voteMeal(mealId, 'dislike'), 240);
                 } else {
-                    // Snap back to center
                     card.style.transform = `translateX(0px) rotate(0deg)`;
                     if (likeStamp) likeStamp.style.opacity = '0';
                     if (nopeStamp) nopeStamp.style.opacity = '0';
                 }
             };
 
-            // Mouse Listeners
             card.onmousedown = (e) => onStart(e.clientX);
             window.onmousemove = (e) => { if (isDragging) onMove(e.clientX); };
             window.onmouseup = () => { if (isDragging) onEnd(); };
 
-            // Mobile Touch Listeners
             card.ontouchstart = (e) => onStart(e.touches[0].clientX);
             window.ontouchmove = (e) => { if (isDragging) onMove(e.touches[0].clientX); };
             window.ontouchend = () => { if (isDragging) onEnd(); };
@@ -369,13 +428,13 @@
             setTimeout(() => voteMeal(mealId, voteType), 240);
         }
 
-        /**
-         * 6. UI RENDER ENGINE
-         */
         function render() {
             const app = document.getElementById('app');
             
-            // Screen 1: Google Sign-In Page
+            const syncBadge = isCloudConnected 
+                ? `<span class="bg-emerald-500/30 border border-emerald-300/40 text-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full">☁️ Cloud Live</span>`
+                : `<span class="bg-amber-500/30 border border-amber-300/40 text-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full">💾 Local Mode</span>`;
+
             if (!state.isAuthenticated) {
                 app.innerHTML = `
                     <div class="glass-card rounded-3xl p-8 shadow-2xl text-center mt-10">
@@ -385,6 +444,7 @@
                             </div>
                             <h1 class="text-3xl font-extrabold mt-4 tracking-tight">Dinnder</h1>
                             <p class="text-sm text-white/85 mt-1">Swipe right on dinner. Find meals the whole family loves!</p>
+                            <div class="mt-2">${syncBadge}</div>
                         </div>
 
                         ${state.groupCode ? `
@@ -405,21 +465,21 @@
                 return;
             }
 
-            // Calculate Crossovers (Meals liked by 100% of family members)
-            const crossoverMeals = state.meals.filter(m => state.members.length > 0 && state.members.every(member => m.likes.includes(member)));
-            // Filter unvoted meals for the active family member
-            const unvotedMeals = state.meals.filter(m => !m.likes.includes(state.activeMember) && !m.dislikes.includes(state.activeMember));
+            const crossoverMeals = state.meals.filter(m => state.members.length > 0 && state.members.every(member => (m.likes || []).includes(member)));
+            const unvotedMeals = state.meals.filter(m => !(m.likes || []).includes(state.activeMember) && !(m.dislikes || []).includes(state.activeMember));
             const currentMealCard = unvotedMeals.length > 0 ? unvotedMeals[0] : null;
             const votedCount = state.meals.length - unvotedMeals.length;
 
             app.innerHTML = `
-                <!-- Compact Top Header & Family Link Bar -->
                 <div class="glass-card rounded-2xl p-3.5 mb-3 flex items-center justify-between shadow-lg">
                     <div class="flex items-center gap-2">
                         <span class="text-2xl">🔥</span>
                         <div>
-                            <h2 class="font-extrabold text-base leading-tight">Dinnder</h2>
-                            <p class="text-[11px] text-white/75">Room: <span class="font-mono font-bold text-white">${state.groupCode}</span></p>
+                            <div class="flex items-center gap-1.5">
+                                <h2 class="font-extrabold text-base leading-tight">Dinnder</h2>
+                                ${syncBadge}
+                            </div>
+                            <p class="text-[11px] text-white/75 mt-0.5">Room: <span class="font-mono font-bold text-white">${state.groupCode}</span></p>
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
@@ -430,7 +490,6 @@
                     </div>
                 </div>
 
-                <!-- Active Family Member Switcher -->
                 <div class="glass-card rounded-2xl p-3 mb-3 shadow-lg">
                     <div class="flex items-center justify-between mb-1.5">
                         <span class="text-[11px] text-white/80 font-semibold uppercase tracking-wider">Swiping As:</span>
@@ -438,7 +497,7 @@
                     </div>
                     <div class="flex flex-wrap gap-1.5">
                         ${state.members.map(m => {
-                            const memberUnvoted = state.meals.filter(meal => !meal.likes.includes(m) && !meal.dislikes.includes(m)).length;
+                            const memberUnvoted = state.meals.filter(meal => !(meal.likes || []).includes(m) && !(meal.dislikes || []).includes(m)).length;
                             return `
                                 <button onclick="setActiveMember('${m}')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${state.activeMember === m ? 'bg-white text-indigo-600 shadow-md scale-105' : 'bg-white/10 hover:bg-white/20 text-white'}">
                                     <span>${m}</span>${memberUnvoted === 0 ? '<span class="text-[10px]">✅</span>' : `<span class="text-[10px] opacity-70">(${memberUnvoted})</span>`}
@@ -448,7 +507,6 @@
                     </div>
                 </div>
 
-                <!-- Navigation Bar -->
                 <div class="flex gap-2 mb-4">
                     <button onclick="switchTab('voting')" class="flex-1 py-2.5 rounded-xl text-xs font-bold transition ${state.currentTab === 'voting' ? 'bg-white text-indigo-600 shadow-lg' : 'glass-card text-white/85'}">
                         🔥 Swipe (${unvotedMeals.length})
@@ -461,14 +519,11 @@
                     </button>
                 </div>
 
-                <!-- TAB 1: TINDER SWIPE DECK (Immediately Visible!) -->
                 ${state.currentTab === 'voting' ? `
                     <div class="space-y-4">
                         ${currentMealCard ? `
-                            <!-- Prominent Tinder Swipe Card -->
                             <div id="swipeCard-${currentMealCard.id}" class="glass-card tinder-card rounded-3xl p-6 text-center shadow-2xl relative overflow-hidden min-h-[360px] flex flex-col justify-between border-2 border-white/40">
                                 
-                                <!-- Dynamic LIKE / NOPE Overlay Stamps -->
                                 <div id="stampLike" class="stamp-badge opacity-0 absolute top-6 left-6 border-4 border-emerald-400 text-emerald-300 font-extrabold text-xl px-3 py-1 rounded-xl -rotate-12 pointer-events-none z-10">
                                     YUM! ❤️
                                 </div>
@@ -480,18 +535,16 @@
                                     👈 Swipe Left (Nope) • Swipe Right (Like) 👉
                                 </div>
 
-                                <!-- Meal Header & Icon -->
                                 <div class="my-3 pointer-events-none">
                                     <div class="text-7xl mb-3 drop-shadow-md">${currentMealCard.icon || '🍽️'}</div>
                                     <h3 class="text-2xl font-extrabold tracking-tight">${currentMealCard.name}</h3>
                                     <p class="text-xs text-white/75 mt-1">Menu Card #${votedCount + 1} of ${state.meals.length}</p>
                                 </div>
 
-                                <!-- Menu Card Ingredients List -->
                                 <div class="bg-black/25 p-4 rounded-2xl text-left pointer-events-none">
                                     <p class="text-xs font-bold uppercase tracking-wider text-white/80 mb-2">📋 Menu Ingredients:</p>
                                     <div class="flex flex-wrap gap-1.5">
-                                        ${currentMealCard.ingredients.map(ing => `
+                                        ${(currentMealCard.ingredients || []).map(ing => `
                                             <span class="bg-white/20 border border-white/20 text-white text-xs font-medium px-2.5 py-1 rounded-xl">
                                                 ${ing}
                                             </span>
@@ -499,7 +552,6 @@
                                     </div>
                                 </div>
 
-                                <!-- Tinder Action Buttons -->
                                 <div class="flex items-center justify-center gap-6 mt-5">
                                     <button onclick="triggerButtonSwipe(${currentMealCard.id}, 'dislike')" class="w-16 h-16 rounded-full bg-rose-500/90 hover:bg-rose-500 text-white text-2xl shadow-xl flex items-center justify-center transition transform hover:scale-110 active:scale-95 border-2 border-white/40">
                                         ✖️
@@ -510,12 +562,11 @@
                                 </div>
                             </div>
                         ` : `
-                            <!-- All Meals Voted State -->
                             <div class="glass-card rounded-3xl p-8 text-center space-y-4 shadow-xl">
                                 <div class="text-6xl">🎉</div>
                                 <h3 class="font-extrabold text-xl">${state.activeMember} is all done swiping!</h3>
                                 <p class="text-xs text-white/85 leading-relaxed">
-                                    Switch to the next family member above so they can swipe, or check the <strong>Matches</strong> tab to see your family's crossover meals!
+                                    Switch to the next family member above or check the <strong>Matches</strong> tab to see your family's crossover meals!
                                 </p>
                                 <div class="flex gap-2 justify-center pt-2">
                                     <button onclick="switchTab('crossover')" class="bg-white text-indigo-600 px-5 py-2.5 rounded-xl text-xs font-bold shadow-lg">
@@ -528,7 +579,6 @@
                             </div>
                         `}
 
-                        <!-- Collapsible Add New Meal Section -->
                         <div class="text-center">
                             <button onclick="toggleAddMealModal()" class="text-xs font-bold bg-white/15 hover:bg-white/25 px-4 py-2 rounded-xl transition">
                                 ${state.showAddMealModal ? '➖ Close New Meal Form' : '➕ Propose a New Family Meal'}
@@ -548,7 +598,6 @@
                     </div>
                 ` : ''}
 
-                <!-- TAB 2: CROSSOVER MATCHES ("IT'S A DINNDER!") -->
                 ${state.currentTab === 'crossover' ? `
                     <div class="space-y-3">
                         <div class="glass-card rounded-2xl p-4 text-center shadow-lg">
@@ -568,19 +617,18 @@
                                     <span class="bg-emerald-500/30 text-emerald-200 text-[10px] font-bold px-2.5 py-1 rounded-full">100% Match</span>
                                 </div>
                                 <div class="flex flex-wrap gap-1 mt-2.5">
-                                    ${meal.ingredients.map(ing => `<span class="bg-black/25 text-[11px] px-2.5 py-0.5 rounded-lg">${ing}</span>`).join('')}
+                                    ${(meal.ingredients || []).map(ing => `<span class="bg-black/25 text-[11px] px-2.5 py-0.5 rounded-lg">${ing}</span>`).join('')}
                                 </div>
                             </div>
                         `).join('')}
 
-                        <!-- Partial Matches Breakdown -->
                         <div class="glass-card rounded-2xl p-4 mt-4">
                             <h4 class="font-bold text-xs uppercase tracking-wider text-white/80 mb-2">All Meal Votes Breakdown:</h4>
                             <div class="space-y-2">
                                 ${state.meals.map(m => `
                                     <div class="bg-black/20 p-2.5 rounded-xl flex items-center justify-between text-xs">
                                         <span class="font-semibold">${m.name}</span>
-                                        <span class="text-white/80">❤️ ${m.likes.length}/${state.members.length} (${m.likes.join(', ') || 'None'})</span>
+                                        <span class="text-white/80">❤️ ${(m.likes || []).length}/${state.members.length} (${(m.likes || []).join(', ') || 'None'})</span>
                                     </div>
                                 `).join('')}
                             </div>
@@ -588,10 +636,8 @@
                     </div>
                 ` : ''}
 
-                <!-- TAB 3: FAMILY LINK & PROFILE MANAGEMENT -->
                 ${state.currentTab === 'settings' ? `
                     <div class="space-y-4">
-                        <!-- Share Family Link Card -->
                         <div class="glass-card rounded-2xl p-4 shadow-lg text-center space-y-2">
                             <h3 class="font-bold text-sm">🔗 Invite Family Members</h3>
                             <p class="text-xs text-white/80">Share your invite link or room code so family members can join on their own devices:</p>
@@ -607,7 +653,6 @@
                             </form>
                         </div>
 
-                        <!-- Add / Delete Family Profiles -->
                         <div class="glass-card rounded-2xl p-4 shadow-lg">
                             <h3 class="font-bold text-sm mb-3">👨‍👩‍👧‍👦 Manage Family Profiles</h3>
                             <form onsubmit="addMember(event)" class="flex gap-2 mb-4">
@@ -628,7 +673,6 @@
                             </div>
                         </div>
 
-                        <!-- Reset Votes Button -->
                         <div class="glass-card rounded-2xl p-4 shadow-lg text-center">
                             <button onclick="resetAllVotes()" class="w-full py-2.5 bg-rose-500/40 hover:bg-rose-500/60 border border-rose-300/40 rounded-xl text-xs font-bold transition">
                                 🔄 Reset All Meal Selections to Zero
@@ -638,13 +682,11 @@
                 ` : ''}
             `;
 
-            // Attach Tinder drag physics to the top meal card
             if (currentMealCard && state.currentTab === 'voting') {
                 initSwipeCard(currentMealCard.id);
             }
         }
 
-        // Start App
         loadState();
     </script>
 </body>
