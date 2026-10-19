@@ -64,7 +64,7 @@
         const FIREBASE_CONFIG = {
             apiKey: "AIzaSyDpt4AsXXEnHz-FLuEQYTvXQU5KfD8KNtU",
             authDomain: "dinnder-54fac.firebaseapp.com",
-            databaseURL: "https://dinnder-54fac-default-rtdb.firebaseio.com", // Added your Realtime Database URL
+            databaseURL: "https://dinnder-54fac-default-rtdb.firebaseio.com",
             projectId: "dinnder-54fac",
             storageBucket: "dinnder-54fac.firebasestorage.app",
             messagingSenderId: "523454429939",
@@ -110,7 +110,9 @@
             const url = (FIREBASE_CONFIG.databaseURL || "").trim();
             if (url && url.startsWith("https://")) {
                 try {
-                    firebase.initializeApp(FIREBASE_CONFIG);
+                    if (!firebase.apps.length) {
+                        firebase.initializeApp(FIREBASE_CONFIG);
+                    }
                     db = firebase.database();
                     isCloudConnected = true;
                     console.log("Connected to Firebase Cloud Database!");
@@ -130,6 +132,7 @@
             currentRoomRef.on('value', (snapshot) => {
                 const cloudData = snapshot.val();
                 if (cloudData) {
+                    // Pull shared members and meals from cloud
                     state.members = cloudData.members || ['Mom'];
                     state.meals = (cloudData.meals || DEFAULT_MEALS).map(meal => ({
                         ...meal,
@@ -143,6 +146,7 @@
                     saveLocalDeviceState();
                     render();
                 } else {
+                    // Room doesn't exist in cloud yet; push current local state to initialize it
                     pushSharedDataToCloud();
                 }
             });
@@ -164,12 +168,12 @@
         }
 
         function saveLocalDeviceState() {
-            localStorage.setItem('dinnder_cloud_v1_state', JSON.stringify(state));
+            localStorage.setItem('dinnder_cloud_v2_state', JSON.stringify(state));
         }
 
         function loadState() {
             initCloudDatabase();
-            const saved = localStorage.getItem('dinnder_cloud_v1_state');
+            const saved = localStorage.getItem('dinnder_cloud_v2_state');
             if (saved) {
                 try {
                     state = JSON.parse(saved);
@@ -202,11 +206,6 @@
             e.preventDefault();
             const emailInput = document.getElementById('loginEmail').value.trim();
             if (emailInput) {
-                const isFirstLogin = !localStorage.getItem('dinnder_cloud_v1_init');
-                if (isFirstLogin) {
-                    state.meals = JSON.parse(JSON.stringify(DEFAULT_MEALS));
-                    localStorage.setItem('dinnder_cloud_v1_init', 'true');
-                }
                 state.isAuthenticated = true;
                 state.userEmail = emailInput;
                 if (!state.groupCode) {
@@ -215,6 +214,8 @@
                 state.currentTab = 'voting';
                 saveLocalDeviceState();
                 subscribeToFamilyRoom(state.groupCode);
+                // Immediately push state to ensure room exists in cloud with members/meals
+                setTimeout(pushSharedDataToCloud, 300);
                 render();
             }
         }
