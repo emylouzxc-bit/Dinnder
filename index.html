@@ -58,7 +58,7 @@
     <script>
         /**
          * ============================================================================
-         * 1. CLOUD DATABASE CONFIGURATION (Configured with your exact regional URL)
+         * 1. CLOUD DATABASE CONFIGURATION
          * ============================================================================
          */
         const FIREBASE_CONFIG = {
@@ -115,7 +115,6 @@
                     }
                     db = firebase.database();
                     isCloudConnected = true;
-                    console.log("Connected to Firebase Cloud Database!");
                 } catch (error) {
                     console.error("Firebase setup error:", error);
                     isCloudConnected = false;
@@ -166,12 +165,12 @@
         }
 
         function saveLocalDeviceState() {
-            localStorage.setItem('dinnder_cloud_v3_state', JSON.stringify(state));
+            localStorage.setItem('dinnder_cloud_v4_state', JSON.stringify(state));
         }
 
         function loadState() {
             initCloudDatabase();
-            const saved = localStorage.getItem('dinnder_cloud_v3_state');
+            const saved = localStorage.getItem('dinnder_cloud_v4_state');
             if (saved) {
                 try {
                     state = JSON.parse(saved);
@@ -260,7 +259,7 @@
                 state.members.push(name);
                 state.newMemberName = '';
                 state.activeMember = name;
-                pushSharedDataToCloud();
+                pushSharedDataToCloud(); // Immediately push updated members array to Firebase
                 render();
             }
         }
@@ -278,7 +277,7 @@
             if (state.activeMember === memberName) {
                 state.activeMember = state.members[0];
             }
-            pushSharedDataToCloud();
+            pushSharedDataToCloud(); // Immediately push updated members array to Firebase
             render();
         }
 
