@@ -58,26 +58,22 @@
     <script>
         /**
          * ============================================================================
-         * 1. CLOUD DATABASE CONFIGURATION
-         * Paste your Firebase Realtime Database URL inside the quotes below.
+         * 1. CLOUD DATABASE CONFIGURATION (Configured with your Firebase credentials)
          * ============================================================================
          */
         const FIREBASE_CONFIG = {
-            databaseURL: "// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyDpt4AsXXEnHz-FLuEQYTvXQU5KfD8KNtU",
-  authDomain: "dinnder-54fac.firebaseapp.com",
-  projectId: "dinnder-54fac",
-  storageBucket: "dinnder-54fac.firebasestorage.app",
-  messagingSenderId: "523454429939",
-  appId: "1:523454429939:web:b1d7b04b5e7dfe126f9586",
-  measurementId: "G-BDBLBD9R4D"
-};"
+            apiKey: "AIzaSyDpt4AsXXEnHz-FLuEQYTvXQU5KfD8KNtU",
+            authDomain: "dinnder-54fac.firebaseapp.com",
+            databaseURL: "https://dinnder-54fac-default-rtdb.firebaseio.com", // Added your Realtime Database URL
+            projectId: "dinnder-54fac",
+            storageBucket: "dinnder-54fac.firebasestorage.app",
+            messagingSenderId: "523454429939",
+            appId: "1:523454429939:web:b1d7b04b5e7dfe126f9586",
+            measurementId: "G-BDBLBD9R4D"
         };
 
         /**
-         * 2. DEFAULT MEALS CONFIGURATION (After line 51)
-         * Starting meals always begin with empty likes [] and dislikes [].
+         * 2. DEFAULT MEALS CONFIGURATION
          */
         const DEFAULT_MEALS = [
             { id: 1, icon: '🍝', name: 'Spaghetti Bolognese', ingredients: ['Minced Beef', 'Tomatoes', 'Spaghetti', 'Garlic', 'Onion', 'Parmesan'], likes: [], dislikes: [] },
@@ -111,12 +107,13 @@ const firebaseConfig = {
         let currentRoomRef = null;
 
         function initCloudDatabase() {
-            const url = FIREBASE_CONFIG.databaseURL.trim();
-            if (url && url !== "PASTE_YOUR_DATABASE_URL_HERE" && url.startsWith("https://")) {
+            const url = (FIREBASE_CONFIG.databaseURL || "").trim();
+            if (url && url.startsWith("https://")) {
                 try {
                     firebase.initializeApp(FIREBASE_CONFIG);
                     db = firebase.database();
                     isCloudConnected = true;
+                    console.log("Connected to Firebase Cloud Database!");
                 } catch (error) {
                     console.error("Firebase setup error:", error);
                     isCloudConnected = false;
