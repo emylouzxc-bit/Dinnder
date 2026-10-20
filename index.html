@@ -68,8 +68,9 @@
         <!-- Dynamic Content Rendered via JavaScript -->
     </div>
 
-    <!-- Custom Themed Edit Vote Modal Container -->
+    <!-- Custom Themed Edit Vote & Random Selector Modal Containers -->
     <div id="editVoteModalContainer"></div>
+    <div id="randomSelectorModalContainer"></div>
 
     <script>
         /**
@@ -510,6 +511,42 @@
             render();
         }
 
+        function openRandomSelector() {
+            const crossoverMeals = state.meals.filter(m => state.members.length > 0 && state.members.every(member => (m.likes || []).includes(member)));
+            if (crossoverMeals.length === 0) return;
+
+            const randomMeal = crossoverMeals[Math.floor(Math.random() * crossoverMeals.length)];
+
+            const container = document.getElementById('randomSelectorModalContainer');
+            container.innerHTML = `
+                <div class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop">
+                    <div class="glass-card rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4 border border-white/40 text-center animate-scaleIn">
+                        <div class="text-5xl animate-bounce">🎲</div>
+                        <h3 class="font-extrabold text-lg">Tonight's Random Match!</h3>
+                        
+                        <div class="bg-white/20 p-4 rounded-2xl my-2 border border-white/30 shadow-inner">
+                            <div class="text-6xl mb-2">${randomMeal.icon || '🍽️'}</div>
+                            <h4 class="font-extrabold text-xl text-emerald-200">${randomMeal.name}</h4>
+                            <p class="text-[11px] text-white/80 mt-1">${randomMeal.ingredients.join(', ')}</p>
+                        </div>
+
+                        <div class="space-y-2 pt-2">
+                            <button onclick="openRandomSelector()" class="w-full py-3 bg-white text-indigo-600 rounded-2xl text-xs font-bold shadow-lg hover:bg-white/90 transition flex items-center justify-center gap-2">
+                                🎲 Spin Again!
+                            </button>
+                            <button onclick="closeRandomSelector()" class="w-full py-2.5 bg-white/20 hover:bg-white/30 rounded-xl text-xs font-bold transition">
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function closeRandomSelector() {
+            document.getElementById('randomSelectorModalContainer').innerHTML = '';
+        }
+
         function switchTab(tab) {
             state.currentTab = tab;
             render();
@@ -783,8 +820,15 @@
                     <div class="space-y-3">
                         <div class="glass-card rounded-2xl p-4 text-center shadow-lg">
                             <h3 class="font-extrabold text-base">✨ It's a Dinnder! (100% Match)</h3>
-                            <p class="text-xs text-white/80 mt-1">Every single family member (${state.members.join(', ')}) swiped right on these meals:</p>
+                            <p class="text-xs text-white/80 mt-1">Every single family member (${state.members.join(', ')}) swiped right on these meals:</p>${crossoverMeals.length > 0 ? `
+                                <div class="mt-4 pt-3 border-t border-white/20">
+                                    <button onclick="openRandomSelector()" class="w-full py-3 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white font-extrabold rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm transition transform hover:scale-[1.02] active:scale-95">
+                                        🎲 Pick a Random Match for Dinner!
+                                    </button>
+                                </div>
+                            ` : ''}
                         </div>
+
                         ${crossoverMeals.length === 0 ? `
                             <div class="glass-card rounded-2xl p-8 text-center text-white/80 text-xs space-y-2">
                                 <div class="text-4xl mb-2">🍽️</div>
