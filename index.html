@@ -73,6 +73,7 @@
     <div id="randomSelectorModalContainer"></div>
     <div id="inviteModalContainer"></div>
     <div id="privacyPolicyModalContainer"></div>
+    <div id="proUpgradeModalContainer"></div>
 
     <script>
         /**
@@ -217,6 +218,7 @@
             joinCodeInput: '',
             showAddMealModal: false,
             currentTab: 'voting',
+            isProUser: false,
             members: ['Mum', 'Dad', 'Emma', 'Noah'],
             meals: JSON.parse(JSON.stringify(DEFAULT_MEALS))
         };
@@ -284,12 +286,12 @@
         }
 
         function saveLocalDeviceState() {
-            localStorage.setItem('dinnder_cloud_v4_state', JSON.stringify(state));
+            localStorage.setItem('dinnder_cloud_v5_state', JSON.stringify(state));
         }
 
         function loadState() {
             initCloudDatabase();
-            const saved = localStorage.getItem('dinnder_cloud_v4_state');
+            const saved = localStorage.getItem('dinnder_cloud_v5_state');
             if (saved) {
                 try {
                     state = JSON.parse(saved);
@@ -387,6 +389,48 @@
             document.getElementById('inviteModalContainer').innerHTML = '';
         }
 
+        function openProUpgradeModal() {
+            const container = document.getElementById('proUpgradeModalContainer');
+            container.innerHTML = `
+                <div class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop">
+                    <div class="glass-card rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4 border border-white/40 text-center animate-scaleIn">
+                        <div class="text-5xl">👑</div>
+                        <h3 class="font-extrabold text-xl text-amber-200">Dinnder Family Pro</h3>
+                        <p class="text-xs text-white/80">Unlock all 106+ family meals, the random dinner picker, and custom recipes!</p>
+                        
+                        <div class="space-y-2.5 pt-2">
+                            <button onclick="simulateGooglePlayPurchase('lifetime')" class="w-full py-3.5 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white font-extrabold rounded-2xl shadow-lg transition text-xs">
+                                🚀 Lifetime Unlock - £3.99
+                            </button>
+                            <button onclick="simulateGooglePlayPurchase('monthly')" class="w-full py-3 bg-white/20 hover:bg-white/30 text-white font-bold rounded-2xl transition text-xs border border-white/30">
+                                🔄 Monthly Subscription - £0.99 / mo
+                            </button>
+                        </div>
+
+                        <div class="pt-2">
+                            <button onclick="closeProUpgradeModal()" class="w-full py-2 text-white/70 hover:text-white text-xs font-bold transition">
+                                Maybe Later
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function closeProUpgradeModal() {
+            document.getElementById('proUpgradeModalContainer').innerHTML = '';
+        }
+
+        function simulateGooglePlayPurchase(type) {
+            // In the final native build, this triggers Google Play Billing SDK.
+            // For testing/simulation, we instantly grant Pro status.
+            state.isProUser = true;
+            saveLocalDeviceState();
+            closeProUpgradeModal();
+            alert(`🎉 Success! You have upgraded to Dinnder Family Pro (${type === 'lifetime' ? 'Lifetime' : 'Monthly'})!`);
+            render();
+        }
+
         function openPrivacyPolicyModal() {
             const container = document.getElementById('privacyPolicyModalContainer');
             container.innerHTML = `
@@ -404,7 +448,7 @@
                             <p><strong>1. Information We Collect</strong><br>
                             • <em>Account Info:</em> We collect your email address (via Google Authentication) to identify you within your family group.<br>
                             • <em>Family Data:</em> Names, custom meals, ingredients, and your swipe votes (likes/dislikes).<br>
-                            • <em>Billing & Payments:</em> Premium subscriptions and in-app purchases are securely processed through <strong>Google Play Billing</strong>. We do not store your full financial credentials on our servers.</p>
+                            • <em>Billing & Payments:</em> Premium subscriptions and in-app purchases (£3.99 lifetime or £0.99/mo) are securely processed through <strong>Google Play Billing</strong>. We do not store your full financial credentials on our servers.</p>
 
                             <p><strong>2. How We Use Your Information</strong><br>
                             • To authenticate your session and link you to your family room via room codes.<br>
@@ -481,6 +525,10 @@
         }
 
         function toggleAddMealModal() {
+            if (!state.isProUser) {
+                openProUpgradeModal();
+                return;
+            }
             state.showAddMealModal = !state.showAddMealModal;
             render();
         }
@@ -594,6 +642,10 @@
         }
 
         function openRandomSelector() {
+            if (!state.isProUser) {
+                openProUpgradeModal();
+                return;
+            }
             const crossoverMeals = state.meals.filter(m => state.members.length > 0 && state.members.every(member => (m.likes || []).includes(member)));
             if (crossoverMeals.length === 0) return;
 
@@ -735,6 +787,8 @@
                 ? `<span class="bg-emerald-500/30 border border-emerald-300/40 text-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full">☁️ Cloud Live</span>`
                 : `<span class="bg-amber-500/30 border border-amber-300/40 text-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full">💾 Local Mode</span>`;
 
+            const activeMeals = state.isProUser ? state.meals : state.meals.slice(0, 6);
+
             if (!state.isAuthenticated) {
                 app.innerHTML = `
                     <div class="glass-card rounded-3xl p-8 shadow-2xl text-center mt-10">
@@ -765,10 +819,10 @@
                 return;
             }
 
-            const crossoverMeals = state.meals.filter(m => state.members.length > 0 && state.members.every(member => (m.likes || []).includes(member)));
-            const unvotedMeals = state.meals.filter(m => !(m.likes || []).includes(state.activeMember) && !(m.dislikes || []).includes(state.activeMember));
+            const crossoverMeals = activeMeals.filter(m => state.members.length > 0 && state.members.every(member => (m.likes || []).includes(member)));
+            const unvotedMeals = activeMeals.filter(m => !(m.likes || []).includes(state.activeMember) && !(m.dislikes || []).includes(state.activeMember));
             const currentMealCard = unvotedMeals.length > 0 ? unvotedMeals[0] : null;
-            const votedCount = state.meals.length - unvotedMeals.length;
+            const votedCount = activeMeals.length - unvotedMeals.length;
 
             app.innerHTML = `
                 <div class="glass-card rounded-2xl p-3.5 mb-3 flex items-center justify-between shadow-lg">
@@ -778,26 +832,40 @@
                             <div class="flex items-center gap-1.5">
                                 <h2 class="font-extrabold text-base leading-tight">Dinnder</h2>
                                 ${syncBadge}
+                                ${state.isProUser ? '<span class="bg-amber-400 text-black text-[10px] font-extrabold px-2 py-0.5 rounded-full">👑 PRO</span>' : ''}
                             </div>
                             <p class="text-[11px] text-white/75 mt-0.5">Room: <span class="font-mono font-bold text-white">${state.groupCode}</span></p>
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
                         <button onclick="copyInviteLink()" class="text-xs bg-emerald-500/80 hover:bg-emerald-500 px-3 py-1.5 rounded-xl font-bold shadow transition flex items-center gap-1">
-                            🔗 Share Link
+                            🔗 Share
                         </button>
                         <button onclick="handleLogout()" class="text-xs bg-white/15 hover:bg-white/25 px-2.5 py-1.5 rounded-xl transition">Exit</button>
                     </div>
                 </div>
 
+                ${!state.isProUser ? `
+                    <div onclick="openProUpgradeModal()" class="glass-card bg-gradient-to-r from-amber-500/30 to-orange-500/30 border border-amber-300/40 rounded-2xl p-3 mb-3 shadow-lg cursor-pointer flex items-center justify-between transition transform hover:scale-[1.01]">
+                        <div class="flex items-center gap-2.5">
+                            <span class="text-2xl">👑</span>
+                            <div>
+                                <h4 class="font-extrabold text-xs">Upgrade to Family Pro</h4>
+                                <p class="text-[10px] text-white/80">Unlock 106+ meals, dice picker & custom recipes!</p>
+                            </div>
+                        </div>
+                        <span class="bg-white text-indigo-700 font-extrabold text-[10px] px-3 py-1.5 rounded-xl shadow">Unlock £3.99</span>
+                    </div>
+                ` : ''}
+
                 <div class="glass-card rounded-2xl p-3 mb-3 shadow-lg">
                     <div class="flex items-center justify-between mb-1.5">
                         <span class="text-[11px] text-white/80 font-semibold uppercase tracking-wider">Swiping As:</span>
-                        <span class="text-[11px] text-white/80">${votedCount} / ${state.meals.length} Swiped</span>
+                        <span class="text-[11px] text-white/80">${votedCount} / ${activeMeals.length} Swiped</span>
                     </div>
                     <div class="flex flex-wrap gap-1.5">
                         ${state.members.map(m => {
-                            const memberUnvoted = state.meals.filter(meal => !(meal.likes || []).includes(m) && !(meal.dislikes || []).includes(m)).length;
+                            const memberUnvoted = activeMeals.filter(meal => !(meal.likes || []).includes(m) && !(meal.dislikes || []).includes(m)).length;
                             return `
                                 <button onclick="setActiveMember('${m}')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${state.activeMember === m ? 'bg-white text-indigo-600 shadow-md scale-105' : 'bg-white/10 hover:bg-white/20 text-white'}">
                                     <span>${m}</span>${memberUnvoted === 0 ? '<span class="text-[10px]">✅</span>' : `<span class="text-[10px] opacity-70">(${memberUnvoted})</span>`}
@@ -838,7 +906,7 @@
                                 <div class="my-3 pointer-events-none">
                                     <div class="text-7xl mb-3 drop-shadow-md">${currentMealCard.icon || '🍽️'}</div>
                                     <h3 class="text-2xl font-extrabold tracking-tight">${currentMealCard.name}</h3>
-                                    <p class="text-xs text-white/75 mt-1">Menu Card #${votedCount + 1} of ${state.meals.length}</p>
+                                    <p class="text-xs text-white/75 mt-1">Menu Card #${votedCount + 1} of ${activeMeals.length}</p>
                                 </div>
 
                                 <div class="bg-black/25 p-4 rounded-2xl text-left pointer-events-none">
@@ -881,11 +949,11 @@
 
                         <div class="text-center">
                             <button onclick="toggleAddMealModal()" class="text-xs font-bold bg-white/15 hover:bg-white/25 px-4 py-2 rounded-xl transition">
-                                ${state.showAddMealModal ? '➖ Close New Meal Form' : '➕ Propose a New Family Meal'}
+                                ${state.showAddMealModal ? '➖ Close New Meal Form' : '➕ Propose a New Family Meal'} ${!state.isProUser ? '👑' : ''}
                             </button>
                         </div>
 
-                        ${state.showAddMealModal ? `
+                        ${state.showAddMealModal && state.isProUser ? `
                             <div class="glass-card rounded-2xl p-4 shadow-lg">
                                 <form onsubmit="addMeal(event)" class="space-y-2.5">
                                     <p class="text-xs font-bold">Add a custom meal card to the deck:</p>
@@ -905,7 +973,7 @@
                             <p class="text-xs text-white/80 mt-1">Every single family member (${state.members.join(', ')}) swiped right on these meals:</p>${crossoverMeals.length > 0 ? `
                                 <div class="mt-4 pt-3 border-t border-white/20">
                                     <button onclick="openRandomSelector()" class="w-full py-3 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white font-extrabold rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm transition transform hover:scale-[1.02] active:scale-95">
-                                        🎲 Pick a Random Match for Dinner!
+                                        🎲 Pick a Random Match for Dinner! ${!state.isProUser ? '👑' : ''}
                                     </button>
                                 </div>
                             ` : ''}
@@ -938,7 +1006,7 @@
                                 <span class="text-[10px] text-amber-200 font-bold">💡 Click any row as (${state.activeMember}) to edit your vote</span>
                             </div>
                             <div class="space-y-2">
-                                ${state.meals.map(m => `
+                                ${activeMeals.map(m => `
                                     <div onclick="openEditVoteModal(${m.id})" class="clickable-row bg-black/20 p-2.5 rounded-xl flex items-center justify-between text-xs">
                                         <span class="font-semibold">${m.name}</span>
                                         <span class="text-white/80">❤️ ${(m.likes || []).length}/${state.members.length} ${(m.likes || []).includes(state.activeMember) ? '(You Liked 👍)' : (m.dislikes || []).includes(state.activeMember) ? '(You Disliked 👎)' : ''}</span>
@@ -987,6 +1055,9 @@
                         </div>
 
                         <div class="glass-card rounded-2xl p-4 shadow-lg text-center space-y-3">
+                            <button onclick="openProUpgradeModal()" class="w-full py-3 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white font-extrabold rounded-xl text-xs shadow transition">
+                                👑 Manage Family Pro Subscription
+                            </button>
                             <button onclick="openPrivacyPolicyModal()" class="w-full py-2.5 bg-white/20 hover:bg-white/30 rounded-xl text-xs font-bold transition">
                                 🔒 View Privacy Policy
                             </button>
