@@ -247,7 +247,7 @@
             currentRoomRef.on('value', (snapshot) => {
                 const cloudData = snapshot.val();
                 if (cloudData) {
-                    state.members = cloudData.members || ['Mom'];
+                    state.members = cloudData.members || ['Mum'];
                     state.meals = (cloudData.meals || DEFAULT_MEALS).map(meal => ({
                         ...meal,
                         ingredients: meal.ingredients || [],
