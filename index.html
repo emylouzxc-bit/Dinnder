@@ -68,9 +68,10 @@
         <!-- Dynamic Content Rendered via JavaScript -->
     </div>
 
-    <!-- Custom Themed Edit Vote & Random Selector Modal Containers -->
+    <!-- Custom Themed Modal Containers -->
     <div id="editVoteModalContainer"></div>
     <div id="randomSelectorModalContainer"></div>
+    <div id="inviteModalContainer"></div>
 
     <script>
         /**
@@ -343,15 +344,46 @@
         function copyInviteLink() {
             const baseUrl = window.location.href.split('?')[0];
             const inviteUrl = `${baseUrl}?room=${state.groupCode}`;
+            
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(inviteUrl).then(() => {
-                    alert(`Family Invite Link copied to clipboard!\n\nSend this link to your family:\n${inviteUrl}`);
+                    showInviteModal(inviteUrl);
                 }).catch(() => {
-                    prompt("Copy your family invite link below:", inviteUrl);
+                    showInviteModal(inviteUrl);
                 });
             } else {
-                prompt("Copy your family invite link below:", inviteUrl);
+                showInviteModal(inviteUrl);
             }
+        }
+
+        function showInviteModal(inviteUrl) {
+            const container = document.getElementById('inviteModalContainer');
+            container.innerHTML = `
+                <div class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop">
+                    <div class="glass-card rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4 border border-white/40 text-center animate-scaleIn">
+                        <div class="text-5xl">🔗</div>
+                        <h3 class="font-extrabold text-lg">Family Invite Link</h3>
+                        <p class="text-xs text-white/80">Share this link or room code with your family members so they can join your room:</p>
+                        
+                        <div class="bg-white/20 p-3 rounded-2xl border border-white/30 text-xs font-mono break-all select-all text-white">
+                            ${inviteUrl}
+                        </div>
+
+                        <div class="space-y-2 pt-2">
+                            <button onclick="navigator.clipboard.writeText('${inviteUrl}'); alert('Link copied again!');" class="w-full py-3 bg-white text-indigo-600 rounded-2xl text-xs font-bold shadow-lg hover:bg-white/90 transition flex items-center justify-center gap-2">
+                                📋 Copy Link to Clipboard
+                            </button>
+                            <button onclick="closeInviteModal()" class="w-full py-2.5 bg-white/20 hover:bg-white/30 rounded-xl text-xs font-bold transition">
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function closeInviteModal() {
+            document.getElementById('inviteModalContainer').innerHTML = '';
         }
 
         function joinGroup(e) {
