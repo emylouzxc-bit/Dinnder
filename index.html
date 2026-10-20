@@ -72,6 +72,7 @@
     <div id="editVoteModalContainer"></div>
     <div id="randomSelectorModalContainer"></div>
     <div id="inviteModalContainer"></div>
+    <div id="privacyPolicyModalContainer"></div>
 
     <script>
         /**
@@ -384,6 +385,55 @@
 
         function closeInviteModal() {
             document.getElementById('inviteModalContainer').innerHTML = '';
+        }
+
+        function openPrivacyPolicyModal() {
+            const container = document.getElementById('privacyPolicyModalContainer');
+            container.innerHTML = `
+                <div class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop">
+                    <div class="glass-card rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 border border-white/40 text-left max-h-[85vh] flex flex-col">
+                        <div class="flex items-center justify-between border-b border-white/20 pb-3">
+                            <h3 class="font-extrabold text-base">Privacy Policy</h3>
+                            <button onclick="closePrivacyPolicyModal()" class="text-white/80 hover:text-white font-bold text-lg">✕</button>
+                        </div>
+
+                        <div class="overflow-y-auto space-y-3 text-[11px] text-white/90 leading-relaxed pr-1 flex-1">
+                            <p><strong>Effective Date:</strong> October 20, 2026</p>
+                            <p>Welcome to <strong>Dinnder</strong>. We respect your privacy and are committed to protecting your personal data. This Privacy Policy explains how we collect, use, and safeguard your information.</p>
+                            
+                            <p><strong>1. Information We Collect</strong><br>
+                            • <em>Account Info:</em> We collect your email address (via Google Authentication) to identify you within your family group.<br>
+                            • <em>Family Data:</em> Names, custom meals, ingredients, and your swipe votes (likes/dislikes).<br>
+                            • <em>Billing & Payments:</em> Premium subscriptions and in-app purchases are securely processed through <strong>Google Play Billing</strong>. We do not store your full financial credentials on our servers.</p>
+
+                            <p><strong>2. How We Use Your Information</strong><br>
+                            • To authenticate your session and link you to your family room via room codes.<br>
+                            • To sync meal votes and custom recipes across connected family devices in real-time.<br>
+                            • To manage premium feature entitlements via Google Play.</p>
+
+                            <p><strong>3. Data Storage & Security</strong><br>
+                            • Data is stored securely using <strong>Google Firebase Real-time Database</strong>.<br>
+                            • All payments are securely handled by Google Play Billing in compliance with store policies.</p>
+
+                            <p><strong>4. Children's Privacy</strong><br>
+                            Dinnder is designed as a family-friendly household tool used under adult supervision.</p>
+
+                            <p><strong>5. Contact Us</strong><br>
+                            For privacy inquiries, please contact support through the application channels.</p>
+                        </div>
+
+                        <div class="pt-2 border-t border-white/20">
+                            <button onclick="closePrivacyPolicyModal()" class="w-full py-2.5 bg-white text-indigo-600 rounded-xl text-xs font-bold transition shadow">
+                                Understood
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function closePrivacyPolicyModal() {
+            document.getElementById('privacyPolicyModalContainer').innerHTML = '';
         }
 
         function joinGroup(e) {
@@ -936,7 +986,10 @@
                             </div>
                         </div>
 
-                        <div class="glass-card rounded-2xl p-4 shadow-lg text-center">
+                        <div class="glass-card rounded-2xl p-4 shadow-lg text-center space-y-3">
+                            <button onclick="openPrivacyPolicyModal()" class="w-full py-2.5 bg-white/20 hover:bg-white/30 rounded-xl text-xs font-bold transition">
+                                🔒 View Privacy Policy
+                            </button>
                             <button onclick="resetAllVotes()" class="w-full py-2.5 bg-rose-500/40 hover:bg-rose-500/60 border border-rose-300/40 rounded-xl text-xs font-bold transition">
                                 🔄 Reset All Meal Selections to Zero
                             </button>
