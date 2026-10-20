@@ -46,14 +46,6 @@
         .stamp-badge {
             transition: opacity 0.15s ease;
         }
-        /* Match Card Press Effect */
-        .match-card {
-            cursor: pointer;
-            transition: transform 0.15s ease, background 0.15s ease;
-        }
-        .match-card:active {
-            transform: scale(0.97);
-        }
     </style>
 </head>
 <body class="text-white font-sans antialiased p-4 sm:p-6">
@@ -431,8 +423,365 @@
             }
         }
 
-        function editMatch(mealId) {
-            const meal = state.meals.find(m => m.id === mealId);
-            if (!meal) return;
+        function switchTab(tab) {
+            state.currentTab = tab;
+            render();
+        }
+
+        function setActiveMember(member) {
+            state.activeMember = member;
+            saveLocalDeviceState();
+            render();
+        }
+
+        let isDragging = false;
+        let startX = 0;
+        let currentX = 0;
+
+        function initSwipeCard(mealId) {
+            const card = document.getElementById(`swipeCard-${mealId}`);
+            const likeStamp = document.getElementById('stampLike');
+            const nopeStamp = document.getElementById('stampNope');
+            if (!card) return;
+
+            const onStart = (clientX) => {
+                isDragging = true;
+                startX = clientX;
+                currentX = clientX;
+                card.style.transition = 'none';
+            };
+
+            const onMove = (clientX) => {
+                if (!isDragging) return;
+                currentX = clientX;
+                const deltaX = currentX - startX;
+                const rotation = deltaX * 0.07;
+                card.style.transform = `translateX(${deltaX}px) rotate(${rotation}deg)`;
+
+                if (likeStamp && nopeStamp) {
+                    if (deltaX > 25) {
+                        likeStamp.style.opacity = Math.min(deltaX / 100, 1);
+                        nopeStamp.style.opacity = '0';
+                    } else if (deltaX < -25) {
+                        nopeStamp.style.opacity = Math.min(Math.abs(deltaX) / 100, 1);
+                        likeStamp.style.opacity = '0';
+                    } else {
+                        likeStamp.style.opacity = '0';
+                        nopeStamp.style.opacity = '0';
+                    }
+                }
+            };
+
+            const onEnd = () => {
+                if (!isDragging) return;
+                isDragging = false;
+                const deltaX = currentX - startX;
+                card.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+
+                if (deltaX > 85) {
+                    card.style.transform = `translateX(450px) rotate(28deg)`;
+                    card.style.opacity = '0';
+                    setTimeout(() => voteMeal(mealId, 'like'), 240);
+                } else if (deltaX < -85) {
+                    card.style.transform = `translateX(-450px) rotate(-28deg)`;
+                    card.style.opacity = '0';
+                    setTimeout(() => voteMeal(mealId, 'dislike'), 240);
+                } else {
+                    card.style.transform = `translateX(0px) rotate(0deg)`;
+                    if (likeStamp) likeStamp.style.opacity = '0';
+                    if (nopeStamp) nopeStamp.style.opacity = '0';
+                }
+            };
+
+            card.onmousedown = (e) => onStart(e.clientX);
+            window.onmousemove = (e) => { if (isDragging) onMove(e.clientX); };
+            window.onmouseup = () => { if (isDragging) onEnd(); };
+
+            card.ontouchstart = (e) => onStart(e.touches[0].clientX);
+            window.ontouchmove = (e) => { if (isDragging) onMove(e.touches[0].clientX); };
+            window.ontouchend = () => { if (isDragging) onEnd(); };
+        }
+
+        function triggerButtonSwipe(mealId, voteType) {
+            const card = document.getElementById(`swipeCard-${mealId}`);
+            const likeStamp = document.getElementById('stampLike');
+            const nopeStamp = document.getElementById('stampNope');
+            if (!card) {
+                voteMeal(mealId, voteType);
+                return;
+            }
+            card.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+            if (voteType === 'like') {
+                if (likeStamp) likeStamp.style.opacity = '1';
+                card.style.transform = `translateX(450px) rotate(28deg)`;
+            } else {
+                if (nopeStamp) nopeStamp.style.opacity = '1';
+                card.style.transform = `translateX(-450px) rotate(-28deg)`;
+            }
+            card.style.opacity = '0';
+            setTimeout(() => voteMeal(mealId, voteType), 240);
+        }
+
+        function render() {
+            const app = document.getElementById('app');
             
-            const choice = prompt(`Edit Match: "${meal.name}"\n\nType a family member's name to toggle/remove their like (e.g. ${state.members.join(', '
+            const syncBadge = isCloudConnected 
+                ? `<span class="bg-emerald-500/30 border border-emerald-300/40 text-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full">☁️ Cloud Live</span>`
+                : `<span class="bg-amber-500/30 border border-amber-300/40 text-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full">💾 Local Mode</span>`;
+
+            if (!state.isAuthenticated) {
+                app.innerHTML = `
+                    <div class="glass-card rounded-3xl p-8 shadow-2xl text-center mt-10">
+                        <div class="mb-6">
+                            <div class="w-20 h-20 mx-auto bg-white/20 rounded-full flex items-center justify-center text-5xl shadow-inner">
+                                🔥
+                            </div>
+                            <h1 class="text-3xl font-extrabold mt-4 tracking-tight">Dinnder</h1>
+                            <p class="text-sm text-white/85 mt-1">Swipe right on dinner. Find meals the whole family loves!</p>
+                            <div class="mt-2">${syncBadge}</div>
+                        </div>
+
+                        ${state.groupCode ? `
+                            <div class="bg-emerald-500/30 border border-emerald-300/40 rounded-2xl p-3 mb-4 text-xs">
+                                🔗 Joining Family Room: <span class="font-mono font-bold">${state.groupCode}</span>
+                            </div>
+                        ` : ''}
+
+                        <form onsubmit="handleLogin(event)" class="space-y-4">
+                            <input type="email" id="loginEmail" required placeholder="Enter your Google email..." class="glass-input w-full px-4 py-3.5 rounded-2xl outline-none focus:ring-2 focus:ring-white text-sm">
+                            <button type="submit" class="w-full py-3.5 bg-white text-indigo-600 font-bold rounded-2xl shadow-xl hover:bg-white/95 transition flex items-center justify-center gap-2.5 text-sm">
+                                <svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+                                Continue with Google
+                            </button>
+                        </form>
+                    </div>
+                `;
+                return;
+            }
+
+            const crossoverMeals = state.meals.filter(m => state.members.length > 0 && state.members.every(member => (m.likes || []).includes(member)));
+            const unvotedMeals = state.meals.filter(m => !(m.likes || []).includes(state.activeMember) && !(m.dislikes || []).includes(state.activeMember));
+            const currentMealCard = unvotedMeals.length > 0 ? unvotedMeals[0] : null;
+            const votedCount = state.meals.length - unvotedMeals.length;
+
+            app.innerHTML = `
+                <div class="glass-card rounded-2xl p-3.5 mb-3 flex items-center justify-between shadow-lg">
+                    <div class="flex items-center gap-2">
+                        <span class="text-2xl">🔥</span>
+                        <div>
+                            <div class="flex items-center gap-1.5">
+                                <h2 class="font-extrabold text-base leading-tight">Dinnder</h2>
+                                ${syncBadge}
+                            </div>
+                            <p class="text-[11px] text-white/75 mt-0.5">Room: <span class="font-mono font-bold text-white">${state.groupCode}</span></p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="copyInviteLink()" class="text-xs bg-emerald-500/80 hover:bg-emerald-500 px-3 py-1.5 rounded-xl font-bold shadow transition flex items-center gap-1">
+                            🔗 Share Link
+                        </button>
+                        <button onclick="handleLogout()" class="text-xs bg-white/15 hover:bg-white/25 px-2.5 py-1.5 rounded-xl transition">Exit</button>
+                    </div>
+                </div>
+
+                <div class="glass-card rounded-2xl p-3 mb-3 shadow-lg">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-[11px] text-white/80 font-semibold uppercase tracking-wider">Swiping As:</span>
+                        <span class="text-[11px] text-white/80">${votedCount} / ${state.meals.length} Swiped</span>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5">
+                        ${state.members.map(m => {
+                            const memberUnvoted = state.meals.filter(meal => !(meal.likes || []).includes(m) && !(meal.dislikes || []).includes(m)).length;
+                            return `
+                                <button onclick="setActiveMember('${m}')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${state.activeMember === m ? 'bg-white text-indigo-600 shadow-md scale-105' : 'bg-white/10 hover:bg-white/20 text-white'}">
+                                    <span>${m}</span>${memberUnvoted === 0 ? '<span class="text-[10px]">✅</span>' : `<span class="text-[10px] opacity-70">(${memberUnvoted})</span>`}
+                                </button>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+
+                <div class="flex gap-2 mb-4">
+                    <button onclick="switchTab('voting')" class="flex-1 py-2.5 rounded-xl text-xs font-bold transition ${state.currentTab === 'voting' ? 'bg-white text-indigo-600 shadow-lg' : 'glass-card text-white/85'}">
+                        🔥 Swipe (${unvotedMeals.length})
+                    </button>
+                    <button onclick="switchTab('crossover')" class="flex-1 py-2.5 rounded-xl text-xs font-bold transition ${state.currentTab === 'crossover' ? 'bg-white text-indigo-600 shadow-lg' : 'glass-card text-white/85'}">
+                        ✨ Matches (${crossoverMeals.length})
+                    </button>
+                    <button onclick="switchTab('settings')" class="flex-1 py-2.5 rounded-xl text-xs font-bold transition ${state.currentTab === 'settings' ? 'bg-white text-indigo-600 shadow-lg' : 'glass-card text-white/85'}">
+                        👨‍👩‍👧‍👦 Family
+                    </button>
+                </div>
+
+                ${state.currentTab === 'voting' ? `
+                    <div class="space-y-4">
+                        ${currentMealCard ? `
+                            <div id="swipeCard-${currentMealCard.id}" class="glass-card tinder-card rounded-3xl p-6 text-center shadow-2xl relative overflow-hidden min-h-[360px] flex flex-col justify-between border-2 border-white/40">
+                                
+                                <div id="stampLike" class="stamp-badge opacity-0 absolute top-6 left-6 border-4 border-emerald-400 text-emerald-300 font-extrabold text-xl px-3 py-1 rounded-xl -rotate-12 pointer-events-none z-10">
+                                    YUM! ❤️
+                                </div>
+                                <div id="stampNope" class="stamp-badge opacity-0 absolute top-6 right-6 border-4 border-rose-400 text-rose-300 font-extrabold text-xl px-3 py-1 rounded-xl rotate-12 pointer-events-none z-10">
+                                    NOPE ❌
+                                </div>
+
+                                <div class="text-[11px] font-bold uppercase tracking-widest text-white/75 bg-black/20 py-1 px-3 rounded-full mx-auto pointer-events-none">
+                                    👈 Swipe Left (Nope) • Swipe Right (Like) 👉
+                                </div>
+
+                                <div class="my-3 pointer-events-none">
+                                    <div class="text-7xl mb-3 drop-shadow-md">${currentMealCard.icon || '🍽️'}</div>
+                                    <h3 class="text-2xl font-extrabold tracking-tight">${currentMealCard.name}</h3>
+                                    <p class="text-xs text-white/75 mt-1">Menu Card #${votedCount + 1} of ${state.meals.length}</p>
+                                </div>
+
+                                <div class="bg-black/25 p-4 rounded-2xl text-left pointer-events-none">
+                                    <p class="text-xs font-bold uppercase tracking-wider text-white/80 mb-2">📋 Menu Ingredients:</p>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        ${(currentMealCard.ingredients || []).map(ing => `
+                                            <span class="bg-white/20 border border-white/20 text-white text-xs font-medium px-2.5 py-1 rounded-xl">
+                                                ${ing}
+                                            </span>
+                                        `).join('')}
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center justify-center gap-6 mt-5">
+                                    <button onclick="triggerButtonSwipe(${currentMealCard.id}, 'dislike')" class="w-16 h-16 rounded-full bg-rose-500/90 hover:bg-rose-500 text-white text-2xl shadow-xl flex items-center justify-center transition transform hover:scale-110 active:scale-95 border-2 border-white/40">
+                                        ✖️
+                                    </button>
+                                    <button onclick="triggerButtonSwipe(${currentMealCard.id}, 'like')" class="w-16 h-16 rounded-full bg-emerald-500/90 hover:bg-emerald-500 text-white text-2xl shadow-xl flex items-center justify-center transition transform hover:scale-110 active:scale-95 border-2 border-white/40">
+                                        ❤️
+                                    </button>
+                                </div>
+                            </div>
+                        ` : `
+                            <div class="glass-card rounded-3xl p-8 text-center space-y-4 shadow-xl">
+                                <div class="text-6xl">🎉</div>
+                                <h3 class="font-extrabold text-xl">${state.activeMember} is all done swiping!</h3>
+                                <p class="text-xs text-white/85 leading-relaxed">
+                                    Switch to the next family member above or check the <strong>Matches</strong> tab to see your family's crossover meals!
+                                </p>
+                                <div class="flex gap-2 justify-center pt-2">
+                                    <button onclick="switchTab('crossover')" class="bg-white text-indigo-600 px-5 py-2.5 rounded-xl text-xs font-bold shadow-lg">
+                                        View Matches (${crossoverMeals.length})
+                                    </button>
+                                    <button onclick="resetAllVotes()" class="bg-white/20 hover:bg-white/30 text-white px-4 py-2.5 rounded-xl text-xs font-bold">
+                                        Reset All Votes
+                                    </button>
+                                </div>
+                            </div>
+                        `}
+
+                        <div class="text-center">
+                            <button onclick="toggleAddMealModal()" class="text-xs font-bold bg-white/15 hover:bg-white/25 px-4 py-2 rounded-xl transition">
+                                ${state.showAddMealModal ? '➖ Close New Meal Form' : '➕ Propose a New Family Meal'}
+                            </button>
+                        </div>
+
+                        ${state.showAddMealModal ? `
+                            <div class="glass-card rounded-2xl p-4 shadow-lg">
+                                <form onsubmit="addMeal(event)" class="space-y-2.5">
+                                    <p class="text-xs font-bold">Add a custom meal card to the deck:</p>
+                                    <input type="text" required placeholder="Meal title (e.g. Fish & Chips)" value="${state.newMealName}" oninput="state.newMealName = this.value" class="glass-input w-full px-3 py-2 rounded-xl text-xs outline-none">
+                                    <input type="text" placeholder="Ingredients (comma separated: Cod, Potatoes, Peas)" value="${state.newMealIngredients}" oninput="state.newMealIngredients = this.value" class="glass-input w-full px-3 py-2 rounded-xl text-xs outline-none">
+                                    <button type="submit" class="w-full py-2.5 bg-white text-indigo-600 rounded-xl text-xs font-bold shadow">Add to Swipe Deck</button>
+                                </form>
+                            </div>
+                        ` : ''}
+                    </div>
+                ` : ''}
+
+                ${state.currentTab === 'crossover' ? `
+                    <div class="space-y-3">
+                        <div class="glass-card rounded-2xl p-4 text-center shadow-lg">
+                            <h3 class="font-extrabold text-base">✨ It's a Dinnder! (100% Match)</h3>
+                            <p class="text-xs text-white/80 mt-1">Every single family member (${state.members.join(', ')}) swiped right on these meals:</p>
+                        </div>
+                        ${crossoverMeals.length === 0 ? `
+                            <div class="glass-card rounded-2xl p-8 text-center text-white/80 text-xs space-y-2">
+                                <div class="text-4xl mb-2">🍽️</div>
+                                <p class="font-bold">No 100% family crossovers yet!</p>
+                                <p>Make sure each family member selects their name at the top and swipes through the meal cards.</p>
+                            </div>
+                        ` : crossoverMeals.map(meal => `
+                            <div class="glass-card rounded-2xl p-4 shadow-lg border-l-4 border-emerald-400">
+                                <div class="flex items-center justify-between">
+                                    <h3 class="font-extrabold text-base text-emerald-200">${meal.icon || '🥘'} ${meal.name}</h3>
+                                    <span class="bg-emerald-500/30 text-emerald-200 text-[10px] font-bold px-2.5 py-1 rounded-full">100% Match</span>
+                                </div>
+                                <div class="flex flex-wrap gap-1 mt-2.5">
+                                    ${(meal.ingredients || []).map(ing => `<span class="bg-black/25 text-[11px] px-2.5 py-0.5 rounded-lg">${ing}</span>`).join('')}
+                                </div>
+                            </div>
+                        `).join('')}
+
+                        <div class="glass-card rounded-2xl p-4 mt-4">
+                            <h4 class="font-bold text-xs uppercase tracking-wider text-white/80 mb-2">All Meal Votes Breakdown:</h4>
+                            <div class="space-y-2">
+                                ${state.meals.map(m => `
+                                    <div class="bg-black/20 p-2.5 rounded-xl flex items-center justify-between text-xs">
+                                        <span class="font-semibold">${m.name}</span>
+                                        <span class="text-white/80">❤️ ${(m.likes || []).length}/${state.members.length} (${(m.likes || []).join(', ') || 'None'})</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                ` : ''}
+
+                ${state.currentTab === 'settings' ? `
+                    <div class="space-y-4">
+                        <div class="glass-card rounded-2xl p-4 shadow-lg text-center space-y-2">
+                            <h3 class="font-bold text-sm">🔗 Invite Family Members</h3>
+                            <p class="text-xs text-white/80">Share your invite link or room code so family members can join on their own devices:</p>
+                            <div class="bg-black/25 py-2.5 px-4 rounded-xl font-mono font-extrabold tracking-widest text-lg">
+                                ${state.groupCode}
+                            </div>
+                            <button onclick="copyInviteLink()" class="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold shadow transition">
+                                📋 Copy Family Invite Link
+                            </button>
+                            <form onsubmit="joinGroup(event)" class="pt-2 flex gap-2">
+                                <input type="text" placeholder="Or enter another 6-digit code" value="${state.joinCodeInput}" oninput="state.joinCodeInput = this.value" class="glass-input flex-1 px-3 py-2 rounded-xl text-xs uppercase text-center font-bold outline-none">
+                                <button type="submit" class="bg-white text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold">Join</button>
+                            </form>
+                        </div>
+
+                        <div class="glass-card rounded-2xl p-4 shadow-lg">
+                            <h3 class="font-bold text-sm mb-3">👨‍👩‍👧‍👦 Manage Family Profiles</h3>
+                            <form onsubmit="addMember(event)" class="flex gap-2 mb-4">
+                                <input type="text" placeholder="Add family member name..." value="${state.newMemberName}" oninput="state.newMemberName = this.value" class="glass-input flex-1 px-3 py-2 rounded-xl text-xs outline-none">
+                                <button type="submit" class="bg-white text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold shadow">Add</button>
+                            </form>
+                            <div class="space-y-2">
+                                ${state.members.map(member => `
+                                    <div class="flex items-center justify-between bg-black/20 px-3.5 py-2.5 rounded-xl text-xs">
+                                        <span class="font-semibold">👤 ${member}</span>
+                                        ${state.members.length > 1 ? `
+                                            <button onclick="deleteMember('${member}')" class="text-rose-300 hover:text-rose-100 font-bold px-2.5 py-1 rounded-lg bg-rose-500/25">
+                                                Delete Profile
+                                            </button>
+                                        ` : '<span class="text-white/50 text-[10px]">Active</span>'}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div class="glass-card rounded-2xl p-4 shadow-lg text-center">
+                            <button onclick="resetAllVotes()" class="w-full py-2.5 bg-rose-500/40 hover:bg-rose-500/60 border border-rose-300/40 rounded-xl text-xs font-bold transition">
+                                🔄 Reset All Meal Selections to Zero
+                            </button>
+                        </div>
+                    </div>
+                ` : ''}
+            `;
+
+            if (currentMealCard && state.currentTab === 'voting') {
+                initSwipeCard(currentMealCard.id);
+            }
+        }
+
+        loadState();
+    </script>
+</body>
+</html>
