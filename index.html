@@ -46,6 +46,13 @@
         .stamp-badge {
             transition: opacity 0.15s ease;
         }
+        .match-card {
+            cursor: pointer;
+            transition: transform 0.15s ease;
+        }
+        .match-card:active {
+            transform: scale(0.98);
+        }
     </style>
 </head>
 <body class="text-white font-sans antialiased p-4 sm:p-6">
@@ -423,6 +430,38 @@
             }
         }
 
+        function editMatch(mealId) {
+            const meal = state.meals.find(m => m.id === mealId);
+            if (!meal) return;
+            
+            const choice = prompt(`Edit Match: "${meal.name}"\n\nType a family member's name to remove their like (e.g. ${state.members.join(', ')}), or type 'RESET' to clear all votes for this meal:`);
+            if (!choice) return;
+
+            const trimmed = choice.trim();
+            if (trimmed.toUpperCase() === 'RESET') {
+                meal.likes = [];
+                pushSharedDataToCloud();
+                render();
+                alert(`Cleared all votes for ${meal.name}.`);
+                return;
+            }
+
+            const foundMember = state.members.find(m => m.toLowerCase() === trimmed.toLowerCase());
+            if (foundMember) {
+                if (meal.likes.includes(foundMember)) {
+                    meal.likes = meal.likes.filter(m => m !== foundMember);
+                    alert(`Removed like for ${foundMember} on ${meal.name}.`);
+                } else {
+                    meal.likes.push(foundMember);
+                    alert(`Added like for ${foundMember} on ${meal.name}.`);
+                }
+                pushSharedDataToCloud();
+                render();
+            } else {
+                alert(`Family member "${trimmed}" not found. Available members: ${state.members.join(', ')}`);
+            }
+        }
+
         function switchTab(tab) {
             state.currentTab = tab;
             render();
@@ -697,6 +736,7 @@
                         <div class="glass-card rounded-2xl p-4 text-center shadow-lg">
                             <h3 class="font-extrabold text-base">✨ It's a Dinnder! (100% Match)</h3>
                             <p class="text-xs text-white/80 mt-1">Every single family member (${state.members.join(', ')}) swiped right on these meals:</p>
+                            <p class="text-[11px] text-amber-200 mt-2 font-bold bg-black/25 py-1.5 px-3 rounded-xl inline-block">💡 Click any match card below to edit or fix votes!</p>
                         </div>
                         ${crossoverMeals.length === 0 ? `
                             <div class="glass-card rounded-2xl p-8 text-center text-white/80 text-xs space-y-2">
@@ -705,7 +745,10 @@
                                 <p>Make sure each family member selects their name at the top and swipes through the meal cards.</p>
                             </div>
                         ` : crossoverMeals.map(meal => `
-                            <div class="glass-card rounded-2xl p-4 shadow-lg border-l-4 border-emerald-400">
+                            <div onclick="editMatch(${meal.id})" class="match-card glass-card rounded-2xl p-4 shadow-lg border-l-4 border-emerald-400 relative group">
+                                <div class="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition bg-white/25 text-[10px] px-2 py-0.5 rounded-lg font-bold">
+                                    ✏️ Click to Edit
+                                </div>
                                 <div class="flex items-center justify-between">
                                     <h3 class="font-extrabold text-base text-emerald-200">${meal.icon || '🥘'} ${meal.name}</h3>
                                     <span class="bg-emerald-500/30 text-emerald-200 text-[10px] font-bold px-2.5 py-1 rounded-full">100% Match</span>
