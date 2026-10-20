@@ -46,12 +46,12 @@
         .stamp-badge {
             transition: opacity 0.15s ease;
         }
-        .match-card {
+        .clickable-row {
             cursor: pointer;
-            transition: transform 0.15s ease;
+            transition: background 0.15s ease;
         }
-        .match-card:active {
-            transform: scale(0.98);
+        .clickable-row:hover {
+            background: rgba(255, 255, 255, 0.12);
         }
     </style>
 </head>
@@ -462,6 +462,42 @@
             }
         }
 
+        function editAnyMealVote(mealId) {
+            const meal = state.meals.find(m => m.id === mealId);
+            if (!meal) return;
+
+            const isLikedByActive = (meal.likes || []).includes(state.activeMember);
+            const isDislikedByActive = (meal.dislikes || []).includes(state.activeMember);
+
+            let currentStatus = "Not Voted Yet";
+            if (isLikedByActive) currentStatus = "Liked ❤️";
+            if (isDislikedByActive) currentStatus = "Disliked ✖️";
+
+            const action = prompt(`Edit Vote for "${meal.name}" (As: ${state.activeMember})\nCurrent Status: ${currentStatus}\n\nType:\n• 'LIKE' to set as Liked\n• 'DISLIKE' to set as Disliked\n• 'CLEAR' to remove your vote`);
+            if (!action) return;
+
+            const upper = action.trim().toUpperCase();
+
+            // Clear existing vote for active member
+            meal.likes = (meal.likes || []).filter(m => m !== state.activeMember);
+            meal.dislikes = (meal.dislikes || []).filter(m => m !== state.activeMember);
+
+            if (upper === 'LIKE') {
+                meal.likes.push(state.activeMember);
+                alert(`Updated ${state.activeMember}'s vote to Liked for ${meal.name}!`);
+            } else if (upper === 'DISLIKE') {
+                meal.dislikes.push(state.activeMember);
+                alert(`Updated ${state.activeMember}'s vote to Disliked for ${meal.name}!`);
+            } else if (upper === 'CLEAR') {
+                alert(`Cleared ${state.activeMember}'s vote for ${meal.name}. It will now reappear in your swipe deck!`);
+            } else {
+                alert("Unrecognized command. Please type LIKE, DISLIKE, or CLEAR.");
+            }
+
+            pushSharedDataToCloud();
+            render();
+        }
+
         function switchTab(tab) {
             state.currentTab = tab;
             render();
@@ -736,7 +772,6 @@
                         <div class="glass-card rounded-2xl p-4 text-center shadow-lg">
                             <h3 class="font-extrabold text-base">✨ It's a Dinnder! (100% Match)</h3>
                             <p class="text-xs text-white/80 mt-1">Every single family member (${state.members.join(', ')}) swiped right on these meals:</p>
-                            <p class="text-[11px] text-amber-200 mt-2 font-bold bg-black/25 py-1.5 px-3 rounded-xl inline-block">💡 Click any match card below to edit or fix votes!</p>
                         </div>
                         ${crossoverMeals.length === 0 ? `
                             <div class="glass-card rounded-2xl p-8 text-center text-white/80 text-xs space-y-2">
@@ -745,9 +780,9 @@
                                 <p>Make sure each family member selects their name at the top and swipes through the meal cards.</p>
                             </div>
                         ` : crossoverMeals.map(meal => `
-                            <div onclick="editMatch(${meal.id})" class="match-card glass-card rounded-2xl p-4 shadow-lg border-l-4 border-emerald-400 relative group">
+                            <div onclick="editMatch(${meal.id})" class="match-card glass-card rounded-2xl p-4 shadow-lg border-l-4 border-emerald-400 relative group cursor-pointer">
                                 <div class="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition bg-white/25 text-[10px] px-2 py-0.5 rounded-lg font-bold">
-                                    ✏️ Click to Edit
+                                    ✏️ Edit
                                 </div>
                                 <div class="flex items-center justify-between">
                                     <h3 class="font-extrabold text-base text-emerald-200">${meal.icon || '🥘'} ${meal.name}</h3>
@@ -760,12 +795,15 @@
                         `).join('')}
 
                         <div class="glass-card rounded-2xl p-4 mt-4">
-                            <h4 class="font-bold text-xs uppercase tracking-wider text-white/80 mb-2">All Meal Votes Breakdown:</h4>
+                            <div class="flex items-center justify-between mb-2">
+                                <h4 class="font-bold text-xs uppercase tracking-wider text-white/80">All Meal Votes Breakdown:</h4>
+                                <span class="text-[10px] text-amber-200 font-bold">💡 Click any row as (${state.activeMember}) to edit your vote</span>
+                            </div>
                             <div class="space-y-2">
                                 ${state.meals.map(m => `
-                                    <div class="bg-black/20 p-2.5 rounded-xl flex items-center justify-between text-xs">
+                                    <div onclick="editAnyMealVote(${m.id})" class="clickable-row bg-black/20 p-2.5 rounded-xl flex items-center justify-between text-xs">
                                         <span class="font-semibold">${m.name}</span>
-                                        <span class="text-white/80">❤️ ${(m.likes || []).length}/${state.members.length} (${(m.likes || []).join(', ') || 'None'})</span>
+                                        <span class="text-white/80">❤️ ${(m.likes || []).length}/${state.members.length} ${(m.likes || []).includes(state.activeMember) ? '(You Liked 👍)' : ''}</span>
                                     </div>
                                 `).join('')}
                             </div>
