@@ -53,6 +53,12 @@
         .clickable-row:hover {
             background: rgba(255, 255, 255, 0.12);
         }
+        /* Modal Backdrop */
+        .modal-backdrop {
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+        }
     </style>
 </head>
 <body class="text-white font-sans antialiased p-4 sm:p-6">
@@ -61,6 +67,9 @@
     <div id="app" class="max-w-md mx-auto">
         <!-- Dynamic Content Rendered via JavaScript -->
     </div>
+
+    <!-- Custom Themed Edit Vote Modal Container -->
+    <div id="editVoteModalContainer"></div>
 
     <script>
         /**
@@ -430,71 +439,74 @@
             }
         }
 
-        function editMatch(mealId) {
+        function openEditVoteModal(mealId) {
             const meal = state.meals.find(m => m.id === mealId);
             if (!meal) return;
-            
-            const choice = prompt(`Edit Match: "${meal.name}"\n\nType a family member's name to remove their like (e.g. ${state.members.join(', ')}), or type 'RESET' to clear all votes for this meal:`);
-            if (!choice) return;
 
-            const trimmed = choice.trim();
-            if (trimmed.toUpperCase() === 'RESET') {
-                meal.likes = [];
-                pushSharedDataToCloud();
-                render();
-                alert(`Cleared all votes for ${meal.name}.`);
-                return;
-            }
+            const isLiked = (meal.likes || []).includes(state.activeMember);
+            const isDisliked = (meal.dislikes || []).includes(state.activeMember);
 
-            const foundMember = state.members.find(m => m.toLowerCase() === trimmed.toLowerCase());
-            if (foundMember) {
-                if (meal.likes.includes(foundMember)) {
-                    meal.likes = meal.likes.filter(m => m !== foundMember);
-                    alert(`Removed like for ${foundMember} on ${meal.name}.`);
-                } else {
-                    meal.likes.push(foundMember);
-                    alert(`Added like for ${foundMember} on ${meal.name}.`);
-                }
-                pushSharedDataToCloud();
-                render();
-            } else {
-                alert(`Family member "${trimmed}" not found. Available members: ${state.members.join(', ')}`);
-            }
+            let statusText = "Not Voted Yet";
+            if (isLiked) statusText = "Liked ❤️";
+            if (isDisliked) statusText = "Disliked 👎";
+
+            const container = document.getElementById('editVoteModalContainer');
+            container.innerHTML = `
+                <div class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop">
+                    <div class="glass-card rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4 border border-white/40 text-center animate-scaleIn">
+                        <div>
+                            <div class="text-4xl mb-2">${meal.icon || '🍽️'}</div>
+                            <h3 class="font-extrabold text-lg leading-snug">${meal.name}</h3>
+                            <p class="text-xs text-white/80 mt-1">Editing as: <span class="font-bold text-white">${state.activeMember}</span></p>
+                            <p class="text-[11px] text-white/70 mt-0.5">Current: ${statusText}</p>
+                        </div>
+
+                        <div class="space-y-2 pt-2">
+                            <button onclick="applyVoteChange(${meal.id}, 'like')" class="w-full py-3 px-4 rounded-2xl flex items-center justify-between text-xs font-bold transition ${isLiked ? 'bg-emerald-500 text-white shadow-lg' : 'bg-white/15 hover:bg-white/25 text-white'}">
+                                <span class="flex items-center gap-2"><span>❤️</span> Like</span>
+                                <span class="text-base">${isLiked ? '☑️' : '☐'}</span>
+                            </button>
+
+                            <button onclick="applyVoteChange(${meal.id}, 'dislike')" class="w-full py-3 px-4 rounded-2xl flex items-center justify-between text-xs font-bold transition ${isDisliked ? 'bg-rose-500 text-white shadow-lg' : 'bg-white/15 hover:bg-white/25 text-white'}">
+                                <span class="flex items-center gap-2"><span>👎</span> Dislike</span>
+                                <span class="text-base">${isDisliked ? '☑️' : '☐'}</span>
+                            </button>
+
+                            <button onclick="applyVoteChange(${meal.id}, 'clear')" class="w-full py-3 px-4 rounded-2xl flex items-center justify-between text-xs font-bold transition bg-white/10 hover:bg-white/20 text-white">
+                                <span class="flex items-center gap-2"><span>❌</span> Clear Vote</span>
+                                <span class="text-base">☐</span>
+                            </button>
+                        </div>
+
+                        <div class="pt-2">
+                            <button onclick="closeEditVoteModal()" class="w-full py-2.5 bg-white/20 hover:bg-white/30 rounded-xl text-xs font-bold transition">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
         }
 
-        function editAnyMealVote(mealId) {
+        function closeEditVoteModal() {
+            document.getElementById('editVoteModalContainer').innerHTML = '';
+        }
+
+        function applyVoteChange(mealId, action) {
             const meal = state.meals.find(m => m.id === mealId);
             if (!meal) return;
 
-            const isLikedByActive = (meal.likes || []).includes(state.activeMember);
-            const isDislikedByActive = (meal.dislikes || []).includes(state.activeMember);
-
-            let currentStatus = "Not Voted Yet";
-            if (isLikedByActive) currentStatus = "Liked ❤️";
-            if (isDislikedByActive) currentStatus = "Disliked ✖️";
-
-            const action = prompt(`Edit Vote for "${meal.name}" (As: ${state.activeMember})\nCurrent Status: ${currentStatus}\n\nType:\n• 'LIKE' to set as Liked\n• 'DISLIKE' to set as Disliked\n• 'CLEAR' to remove your vote`);
-            if (!action) return;
-
-            const upper = action.trim().toUpperCase();
-
-            // Clear existing vote for active member
             meal.likes = (meal.likes || []).filter(m => m !== state.activeMember);
             meal.dislikes = (meal.dislikes || []).filter(m => m !== state.activeMember);
 
-            if (upper === 'LIKE') {
+            if (action === 'like') {
                 meal.likes.push(state.activeMember);
-                alert(`Updated ${state.activeMember}'s vote to Liked for ${meal.name}!`);
-            } else if (upper === 'DISLIKE') {
+            } else if (action === 'dislike') {
                 meal.dislikes.push(state.activeMember);
-                alert(`Updated ${state.activeMember}'s vote to Disliked for ${meal.name}!`);
-            } else if (upper === 'CLEAR') {
-                alert(`Cleared ${state.activeMember}'s vote for ${meal.name}. It will now reappear in your swipe deck!`);
-            } else {
-                alert("Unrecognized command. Please type LIKE, DISLIKE, or CLEAR.");
             }
 
             pushSharedDataToCloud();
+            closeEditVoteModal();
             render();
         }
 
@@ -697,11 +709,11 @@
                                     YUM! ❤️
                                 </div>
                                 <div id="stampNope" class="stamp-badge opacity-0 absolute top-6 right-6 border-4 border-rose-400 text-rose-300 font-extrabold text-xl px-3 py-1 rounded-xl rotate-12 pointer-events-none z-10">
-                                    NOPE ❌
+                                    NOPE 👎
                                 </div>
 
                                 <div class="text-[11px] font-bold uppercase tracking-widest text-white/75 bg-black/20 py-1 px-3 rounded-full mx-auto pointer-events-none">
-                                    👈 Swipe Left (Nope) • Swipe Right (Like) 👉
+                                    👈 Swipe Left (Dislike) • Swipe Right (Like) 👉
                                 </div>
 
                                 <div class="my-3 pointer-events-none">
@@ -723,7 +735,7 @@
 
                                 <div class="flex items-center justify-center gap-6 mt-5">
                                     <button onclick="triggerButtonSwipe(${currentMealCard.id}, 'dislike')" class="w-16 h-16 rounded-full bg-rose-500/90 hover:bg-rose-500 text-white text-2xl shadow-xl flex items-center justify-center transition transform hover:scale-110 active:scale-95 border-2 border-white/40">
-                                        ✖️
+                                        👎
                                     </button>
                                     <button onclick="triggerButtonSwipe(${currentMealCard.id}, 'like')" class="w-16 h-16 rounded-full bg-emerald-500/90 hover:bg-emerald-500 text-white text-2xl shadow-xl flex items-center justify-center transition transform hover:scale-110 active:scale-95 border-2 border-white/40">
                                         ❤️
@@ -780,7 +792,7 @@
                                 <p>Make sure each family member selects their name at the top and swipes through the meal cards.</p>
                             </div>
                         ` : crossoverMeals.map(meal => `
-                            <div onclick="editMatch(${meal.id})" class="match-card glass-card rounded-2xl p-4 shadow-lg border-l-4 border-emerald-400 relative group cursor-pointer">
+                            <div onclick="openEditVoteModal(${meal.id})" class="match-card glass-card rounded-2xl p-4 shadow-lg border-l-4 border-emerald-400 relative group cursor-pointer">
                                 <div class="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition bg-white/25 text-[10px] px-2 py-0.5 rounded-lg font-bold">
                                     ✏️ Edit
                                 </div>
@@ -801,9 +813,9 @@
                             </div>
                             <div class="space-y-2">
                                 ${state.meals.map(m => `
-                                    <div onclick="editAnyMealVote(${m.id})" class="clickable-row bg-black/20 p-2.5 rounded-xl flex items-center justify-between text-xs">
+                                    <div onclick="openEditVoteModal(${m.id})" class="clickable-row bg-black/20 p-2.5 rounded-xl flex items-center justify-between text-xs">
                                         <span class="font-semibold">${m.name}</span>
-                                        <span class="text-white/80">❤️ ${(m.likes || []).length}/${state.members.length} ${(m.likes || []).includes(state.activeMember) ? '(You Liked 👍)' : ''}</span>
+                                        <span class="text-white/80">❤️ ${(m.likes || []).length}/${state.members.length} ${(m.likes || []).includes(state.activeMember) ? '(You Liked 👍)' : (m.dislikes || []).includes(state.activeMember) ? '(You Disliked 👎)' : ''}</span>
                                     </div>
                                 `).join('')}
                             </div>
